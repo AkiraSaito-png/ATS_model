@@ -1,5 +1,5 @@
 import pandas as pd
-import joblib
+# import joblib
 import numpy as np
 from sklearn.model_selection import train_test_split
 
@@ -98,28 +98,28 @@ def create_model_sist_trans(acts, times, train_ind, metric="Mean"):
 # =====================================
 # Treinar modelo e salvar
 # =====================================
-def train_and_save_model(df: pd.DataFrame, path="tsm_model.pkl"):
-    """
-    Pré-processa os dados, treina o modelo TSM e salva no disco
-    """
-    df = preprocess_data(df)
+# def train_and_save_model(df: pd.DataFrame, path="tsm_model.pkl"):
+#     """
+#     Pré-processa os dados, treina o modelo TSM e salva no disco
+#     """
+#     df = preprocess_data(df)
 
-    # Índices de treino: todos os registros
-    train_ind = list(df.index)
+#     # Índices de treino: todos os registros
+#     train_ind = list(df.index)
 
-    # Cria modelo
-    model = create_model_sist_trans(df["trace"], df["time_remain"], train_ind, metric="Mean")
+#     # Cria modelo
+#     model = create_model_sist_trans(df["trace"], df["time_remain"], train_ind, metric="Mean")
 
-    joblib.dump(model, path)
-    print(f"Modelo salvo em {path}")
-    return model
+#     joblib.dump(model, path)
+#     print(f"Modelo salvo em {path}")
+#     return model
 
 
 # =====================================
 # Carregar modelo salvo
 # =====================================
-def load_model(path="tsm_model.pkl"):
-    return joblib.load(path)
+# def load_model(path="tsm_model.pkl"):
+#     return joblib.load(path)
 
 
 # =====================================
