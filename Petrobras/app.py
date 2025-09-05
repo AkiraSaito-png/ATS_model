@@ -57,7 +57,7 @@ def data_split_tab():
         st.success("✅ Arquivo carregado com sucesso!")
         
         st.subheader("Visualização inicial dos dados")
-        st.dataframe(df.head())
+        st.dataframe(df.head(50))
 
         # Armazena o DataFrame na sessão
         st.session_state["df"] = df
@@ -84,7 +84,7 @@ def data_split_tab():
                 st.session_state["df_train"],
                 st.session_state["df_test"],
                 metric="Mean",
-                pen=2
+                pen=1
             )
 
         df_all = []
@@ -103,7 +103,7 @@ def data_split_tab():
                     "fold": fold_idx,
                     "id_caso": ids,
                     "real": reals,
-                    "pred": preds
+                    "pred": preds,
                 })
 
                 # Erros
@@ -112,6 +112,10 @@ def data_split_tab():
 
                 df_all.append(df_fold)
 
+        df_model = pd.DataFrame(results["model"])
+
+        st.subheader("📈 Resultados Resumidos por Modelo")
+        st.dataframe(df_model)
         # Concatenar tudo em uma única tabela
         df_all = pd.concat(df_all, ignore_index=True)
 

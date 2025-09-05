@@ -338,7 +338,8 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
         "MAE_not_abs_median": MAEs_not_abs_median,
         "MAPE_not_abs_median": MAPEs_not_abs_median,
         "Predict_trace": predict_trace,
-        "Real_trace": real_trace
+        "Real_trace": real_trace,
+        "model": TSM_model
     }
 
 
