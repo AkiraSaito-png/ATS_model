@@ -75,14 +75,16 @@ def prediction_tab():
         for prod_key in results["Predict_trace"].keys():
             preds_folds = results["Predict_trace"][prod_key]
             reals_folds = results["Real_trace"][prod_key]
+            trace_folds = results["better_trace"][prod_key]
             test_folds = st.session_state["df_test"][prod_key]
 
-            for fold_idx, (preds, reals, test_idx) in enumerate(zip(preds_folds, reals_folds, test_folds)):
+            for fold_idx, (preds, reals, trace, test_idx) in enumerate(zip(preds_folds, reals_folds, trace_folds, test_folds)):
                 ids = st.session_state["original_test_df"].loc[test_idx, ["id_caso", "trace"]]
 
                 df_fold = pd.DataFrame({
                     "id_caso": ids["id_caso"].values,
                     "trace": ids["trace"].astype(str).values,  # garante formato legível
+                    "find_better": trace,
                     "real": reals,
                     "pred": preds,
                 })
@@ -142,6 +144,20 @@ def data_split_tab():
             st.session_state["df_test"] = df_test
             st.success("✅ Dados divididos com sucesso!")
 
+    metric_option = st.radio(" Selecione a métrica que deseja usar", ["Média", "Mediana"])
+
+    if metric_option == "Média":
+        metric = "Mean"
+    else:
+        metric = "Median"
+
+    penalty_option = st.radio(" Deseja aplicar penalidade no treino?", ["Sim", "Não"])
+
+    if penalty_option == "Sim":
+        pen = 2
+    else:
+        pen = 1
+
     # Avaliar modelo
     if st.button("Treinar e Avaliar Modelo"):
         if "df" not in st.session_state or "df_train" not in st.session_state or "df_test" not in st.session_state:
@@ -151,8 +167,8 @@ def data_split_tab():
                 {"default": st.session_state["df"]},
                 st.session_state["df_train"],
                 st.session_state["df_test"],
-                metric="Mean",
-                pen=1
+                metric=metric,
+                pen=pen
             )
 
         df_all = []
@@ -161,15 +177,16 @@ def data_split_tab():
         for prod_key in results["Predict_trace"].keys():
             preds_folds = results["Predict_trace"][prod_key]
             reals_folds = results["Real_trace"][prod_key]
+            trace_folds = results["better_trace"][prod_key]
             test_folds = st.session_state["df_test"][prod_key]
 
-            for fold_idx, (preds, reals, test_idx) in enumerate(zip(preds_folds, reals_folds, test_folds)):
-                ids = st.session_state["df"].loc[test_idx]["id_caso"].values
+            for fold_idx, (preds, reals, trace, test_idx) in enumerate(zip(preds_folds, reals_folds, trace_folds, test_folds)):
+                ids = st.session_state["original_test_df"].loc[test_idx, ["id_caso", "trace"]]
 
                 df_fold = pd.DataFrame({
-                    "produto": prod_key,
-                    "fold": fold_idx,
-                    "id_caso": ids,
+                    "id_caso": ids["id_caso"].values,
+                    "trace": ids["trace"].astype(str).values,  # garante formato legível
+                    "find_better": trace,
                     "real": reals,
                     "pred": preds,
                 })

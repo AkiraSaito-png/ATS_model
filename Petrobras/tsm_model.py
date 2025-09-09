@@ -279,6 +279,7 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
 
     predict_trace = {}
     real_trace = {}
+    better_trace = {}
 
     for i in DF.keys():  # itera nos dataframes
         erro_test1 = []
@@ -287,6 +288,7 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
         erro_test4 = []
         p = []
         r = []
+        show_trace = []
 
         for j in range(len(train_indexes[i])):  # itera nos grupos de treino
             print(f'Sample {j} of prod {i[0]} with {i[1]} prob rep          ', end='\r')
@@ -300,7 +302,7 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
             )
 
             # testa o modelo de sistema de transição
-            err1, err2, err3, err4, pred, real = test_model_TSM(
+            err1, err2, err3, err4, pred, real, trace = test_model_TSM(
                 TSM_model,
                 DF[i],
                 test_indexes[i][j],
@@ -314,6 +316,7 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
             erro_test4.append(err4)  # salva o erro relativo (sem abs)
             p.append(pred)
             r.append(real)
+            show_trace.append(trace)
 
         MAEs[i] = [np.mean(k) for k in erro_test1]
         RMSEs[i] = [np.sqrt(np.mean(np.square(k))) for k in erro_test1]
@@ -327,6 +330,8 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
 
         predict_trace[i] = p
         real_trace[i] = r
+        better_trace[i] = show_trace
+
 
     return {
         "MAE": MAEs,
@@ -339,7 +344,8 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
         "MAPE_not_abs_median": MAPEs_not_abs_median,
         "Predict_trace": predict_trace,
         "Real_trace": real_trace,
-        "model": TSM_model
+        "model": TSM_model,
+        "better_trace": better_trace
     }
 
 
@@ -375,6 +381,7 @@ def test_model_TSM(model, df_test, test_ind, metric="Mean", find=1):
     error_pred4 = []  # Erro relativo bruto
     predicted = []
     real1 = []
+    find_better_traces = []
 
     # Processa cada caso de teste
     for act, real in zip(test_df['trace'], test_df['time_remain']):
@@ -382,10 +389,14 @@ def test_model_TSM(model, df_test, test_ind, metric="Mean", find=1):
 
         if act_str in act_to_value:
             pred = act_to_value[act_str]
+
+            traces = None
         else:
             # Encontra atividades similares
             similar_acts = find_better(model["trace"], act, find)
 
+            traces = similar_acts
+            
             if similar_acts:
                 # Obtém valores previstos para atividades similares
                 similar_times = [act_to_value[str(a)] for a in similar_acts if str(a) in act_to_value]
@@ -402,6 +413,7 @@ def test_model_TSM(model, df_test, test_ind, metric="Mean", find=1):
 
         predicted.append(pred)
         real1.append(real)
+        find_better_traces.append(traces)
 
         # Calcula todos os erros de uma vez
         error_raw = real - pred
@@ -415,7 +427,7 @@ def test_model_TSM(model, df_test, test_ind, metric="Mean", find=1):
             error_pred2.append(abs(error_rel))
             error_pred4.append(error_rel)
 
-    return error_pred1, error_pred2, error_pred3, error_pred4, predicted, real1
+    return error_pred1, error_pred2, error_pred3, error_pred4, predicted, real1, find_better_traces
 
 def get_index(dfnew):
     if isinstance(dfnew, pd.DataFrame):
