@@ -416,3 +416,22 @@ def test_model_TSM(model, df_test, test_ind, metric="Mean", find=1):
             error_pred4.append(error_rel)
 
     return error_pred1, error_pred2, error_pred3, error_pred4, predicted, real1
+
+def get_index(dfnew):
+    if isinstance(dfnew, pd.DataFrame):
+        dfnew = {"default": dfnew}
+    
+    index_df = {}
+
+    for key, df in dfnew.items():
+        if "id_caso" not in df.columns:
+            raise KeyError(f"O DataFrame '{key}' não contém a coluna 'id_caso'.")
+
+        # 🔹 pega os índices de cada caso
+        case_indices = []
+        for case_id, group in df.groupby("id_caso"):
+            case_indices.append(group.index.tolist())
+
+        index_df[key] = case_indices
+
+    return index_df
