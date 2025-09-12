@@ -87,6 +87,8 @@ def prediction_tab():
             print(f"Imprimindo results------->>>:\n{results["Predict_trace"]}")
             print("===============================")
 
+            results["model"]
+
             for id_caso, test_indices_for_case in enumerate(st.session_state["df_test"]):
             
                 original_id_trace = st.session_state["original_test_df"].loc[test_indices_for_case][["id_caso", "trace"]]
