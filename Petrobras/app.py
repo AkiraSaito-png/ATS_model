@@ -41,9 +41,10 @@ def prediction_tab():
                 st.session_state["original_test_df"] = test_dataframe
                 st.session_state["df_test"] = caseId_Index_Test
                 st.success("✅ Pré-processamento finalizado com sucesso!")
-
-    st.write("Dados de Treino carregados:", st.session_state["original_train_df"].head(50))
-    st.write("Dados de Teste carregados:", st.session_state["original_test_df"].head(50))
+    
+    if "original_train_df" in st.session_state and "original_test_df" in st.session_state:
+        st.write("Dados de Treino carregados:", st.session_state["original_train_df"].head(50))
+        st.write("Dados de Teste carregados:", st.session_state["original_test_df"].head(50))
 
 
     metric_option = st.radio("Selecione a métrica que deseja usar:", ["Média", "Mediana"])
