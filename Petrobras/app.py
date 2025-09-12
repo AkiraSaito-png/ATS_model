@@ -146,79 +146,78 @@ def data_split_tab():
 
         if st.button("Dividir dados"):
             df_train, df_test = split_train_test_holdout(df, test_size=test_size/100)
-            st.session_state["df_train"] = df_train
-            st.session_state["df_test"] = df_test
+            test_dataframe, caseId_Index_Test = get_index(df_test)
+            train_dataframe, caseId_Index_Test = get_index(df_train)
+            st.session_state["df_train"] = train_dataframe
+            st.session_state["df_test"] = test_dataframe
             st.success("✅ Dados divididos com sucesso!")
 
-    metric_option = st.radio(" Selecione a métrica que deseja usar", ["Média", "Mediana"])
+    metric_option_B = st.radio(" Selecione a métrica que deseja usar", ["Média", "Mediana"], key="metric_option_B")
 
-    if metric_option == "Média":
-        metric = "Mean"
+    if metric_option_B == "Média":
+        metric_b = "Mean"
     else:
-        metric = "Median"
+        metric_b = "Median"
 
-    penalty_option = st.radio(" Deseja aplicar penalidade no treino?", ["Sim", "Não"])
+    penalty_option_B = st.radio(" Deseja aplicar penalidade no treino?", ["Sim", "Não"], key="penalty_option_B")
 
-    if penalty_option == "Sim":
-        pen = 2
+    if penalty_option_B == "Sim":
+        pen_b = 2
     else:
-        pen = 1
+        pen_b = 1
 
     # Avaliar modelo
     if st.button("Treinar e Avaliar Modelo"):
         if "df" not in st.session_state or "df_train" not in st.session_state or "df_test" not in st.session_state:
             st.error("⚠️ Você precisa carregar e dividir os dados primeiro!")
         else:
-            results = evaluate_model(
-                {"default": st.session_state["df"]},
-                st.session_state["df_train"],
-                st.session_state["df_test"],
-                metric=metric,
-                pen=pen
+            results = evaluate_model_new(
+                DF_train = st.session_state["df_train"],
+                DF_test = st.session_state["df_test"],
+                metric = metric_b,
+                pen = pen_b
             )
 
-        df_all = []
+            df_all = []
 
-        # Itera pelos produtos dentro de Predict_trace
-        for prod_key in results["Predict_trace"].keys():
-            preds_folds = results["Predict_trace"][prod_key]
-            reals_folds = results["Real_trace"][prod_key]
-            trace_folds = results["better_trace"][prod_key]
-            test_folds = st.session_state["df_test"][prod_key]
+            df_preds_reals = pd.DataFrame({
+                "real": results["Real_trace"],
+                "pred": results["Predict_trace"],
+                "find_better": results["better_trace"]
+            })
+                
+            final_df_list = []
 
-            for fold_idx, (preds, reals, trace, test_idx) in enumerate(zip(preds_folds, reals_folds, trace_folds, test_folds)):
-                ids = st.session_state["original_test_df"].loc[test_idx, ["id_caso", "trace"]]
-
+            for id_caso, test_indices_for_case in enumerate(st.session_state["df_test"]):
+                
+                original_id_trace = st.session_state["original_test_df"].loc[test_indices_for_case][["id_caso", "trace"]]
+                    
                 df_fold = pd.DataFrame({
-                    "id_caso": ids["id_caso"].values,
-                    "trace": ids["trace"].astype(str).values,  # garante formato legível
-                    "find_better": trace,
-                    "real": reals,
-                    "pred": preds,
+                    "id_caso": original_id_trace["id_caso"],
+                    "trace_original": original_id_trace["trace"], # O trace do último evento do caso
+                    "find_better": results["better_trace"], # O trace similar encontrado
+                    "real": results["Real_trace"],
+                    "pred": results["Predict_trace"],
                 })
-
-                # Erros
+                print(f"DataFrame do fold atual:\n{df_fold}")
+                    # Erros
                 df_fold["error_abs"] = (df_fold["real"] - df_fold["pred"]).abs()
                 df_fold["error_rel"] = df_fold["error_abs"] / df_fold["real"].replace(0, np.nan)
 
-                df_all.append(df_fold)
+                final_df_list.append(df_fold)
 
-        df_model = pd.DataFrame(results["model"])
+                # Concatenar tudo em uma única tabela
+            df_all = pd.concat(final_df_list, ignore_index=True)
 
-        st.subheader("📈 Resultados Resumidos por Modelo")
-        st.dataframe(df_model)
-        # Concatenar tudo em uma única tabela
-        df_all = pd.concat(df_all, ignore_index=True)
+            st.subheader("📊 Resultados Detalhados")
+            st.dataframe(df_all.head(50))  # mostra os primeiros 50 para não pesar
 
-        st.subheader("📊 Resultados Detalhados")
-        st.dataframe(df_all.head(50))  # mostra os primeiros 50 para não pesar
-
-        st.download_button(
-            "⬇️ Baixar Resultados CSV",
-            data=df_all.to_csv(index=False).encode("utf-8"),
-            file_name="resultados_detalhados.csv",
-            mime="text/csv",
-        )
+            st.download_button(
+                "⬇️ Baixar Resultados CSV",
+                data=df_all.to_csv(index=False).encode("utf-8"),
+                file_name="resultados_detalhados.csv",
+                mime="text/csv",
+            )
 # ------------------------------
 # Layout principal
 # ------------------------------

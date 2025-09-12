@@ -255,30 +255,24 @@ def split_train_test_holdout(dfnew, test_size: float = 0.3, random_state: int = 
     df_train = {}
     df_test = {}
 
-    # 🔹 Se for um único DataFrame, converte para dict
-    if isinstance(dfnew, pd.DataFrame):
-        dfnew = {"default": dfnew}
+    # Casos únicos
+    cases = dfnew["id_caso"].unique()
 
-    for key, df in dfnew.items():
-        if "id_caso" not in df.columns:
-            raise KeyError(f"O DataFrame '{key}' não contém a coluna 'id_caso'.")
+    print(f"Splitting DataFrame: \n {cases}.")
 
-        # Casos únicos
-        cases = df["id_caso"].unique()
+    # Split de casos (não de linhas)
+    train_cases, test_cases = train_test_split(
+        cases, test_size=test_size, random_state=random_state
+    )
+    print(f"Splitting DataFrame type: \n {type(train_cases)}.")
 
-        # Split de casos (não de linhas)
-        train_cases, test_cases = train_test_split(
-            cases, test_size=test_size, random_state=random_state
-        )
+    # Índices correspondentes
+    train_mask = dfnew["id_caso"].isin(train_cases)
+    test_mask = dfnew["id_caso"].isin(test_cases)
 
-        # Índices correspondentes
-        train_idx = df.index[df["id_caso"].isin(train_cases)].tolist()
-        test_idx = df.index[df["id_caso"].isin(test_cases)].tolist()
-
-        # Mantém o mesmo formato esperado: listas de listas
-        df_train[key] = [train_idx]
-        df_test[key] = [test_idx]
-
+    df_train = dfnew[train_mask]
+    df_test = dfnew[test_mask]
+    
     return df_train, df_test
 
 
