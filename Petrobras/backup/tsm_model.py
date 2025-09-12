@@ -99,7 +99,7 @@ def create_model_sist_trans_descartado(acts, times, train_ind, metric="Mean"):
                         columns=["trace", "time_remain"])
 
 
-def create_model_sist_trans(trace, time, metric="Mean"):
+def create_model_sist_trans(acts, times, metric="Mean"):
     """
     Cria o modelo de sistema de transição baseado nos sub-traces.
     Esta é uma versão refatorada que usa groupby para eficiência e simplicidade.
@@ -112,19 +112,18 @@ def create_model_sist_trans(trace, time, metric="Mean"):
     Returns:
         pd.DataFrame: DataFrame do modelo com as colunas ["trace", "time_remain"].
     """
-
-    group = pd.DataFrame({'trace': trace, 'time_remain': time})
-    print(f"Group DataFrame has {group}")  # Debug: Quantas linhas o DataFrame group tem
+    # Combina os dados de entrada em um único DataFrame temporário
+    df_fold = pd.DataFrame({'trace': acts, 'time_remain': times})
 
     # Agrupa por 'trace' e calcula a agregação desejada
     if metric == "Mean":
-        model_df = group.groupby('trace')['time_remain'].mean().reset_index()
+        model_df = df_fold.groupby('trace')['time_remain'].mean().reset_index()
     elif metric == "Median":
-        model_df = group.groupby('trace')['time_remain'].median().reset_index()
+        model_df = df_fold.groupby('trace')['time_remain'].median().reset_index()
     else:
         # Lança um erro se a métrica for inválida
         raise ValueError("Métrica deve ser 'Mean' ou 'Median'")
-    
+        
     return model_df
 
 # =====================================
@@ -382,7 +381,7 @@ def evaluate_model(DF, train_indexes, test_indexes, metric="Mean", pen=1):
 
 
 
-def evaluate_model_new(DF_train, DF_test, metric="Mean", pen=1):
+def evaluate_model_new(DF_train, DF_test, train_indexes, test_indexes, metric="Mean", pen=1):
     """
     Avalia modelos de Sistema de Transição (TSM) usando treino e teste vindos
     de bases diferentes, mas ainda controlados por índices.
@@ -414,56 +413,70 @@ def evaluate_model_new(DF_train, DF_test, metric="Mean", pen=1):
     real_trace = {}
     better_trace = {}
 
-    # Inicializa listas para coletar TODOS os erros de TODOS os casos
-    erro_test1 = []
-    erro_test2 = []
-    erro_test3 = []
-    erro_test4 = []
-    predict_trace = []
-    real_trace = []
-    better_trace = []
+    for i in DF_train.keys():  # itera nos produtos/condições
+        erro_test1 = []
+        erro_test2 = []
+        erro_test3 = []
+        erro_test4 = []
+        p = []
+        r = []
+        show_trace = []
 
-    DF_train['trace'] = DF_train['trace'].apply(lambda x: '_'.join(map(str, x)))
-    DF_test['trace'] = DF_test['trace'].apply(lambda x: '_'.join(map(str, x)))
+        for j in range(len(train_indexes[i])):  # itera nos folds/grupos de treino
 
-    TSM_model = create_model_sist_trans(
-        DF_train["trace"],
-        DF_train["time_remain"],
-        metric=metric
-    )
+            current_train_indices = train_indexes[i][j]
+        
+            train_fold_df = DF_train[i].iloc[current_train_indices].copy()
 
-    TSM_model_dict = pd.Series(DF_train.time_remain.values, index=DF_train.trace).to_dict()
+            train_fold_df['trace'] = train_fold_df['trace'].apply(lambda x: '_'.join(map(str, x)))
 
-    for i in range(len(DF_test)):
-        # Testa o modelo no DataFrame do caso atual
-        err1, err2, err3, err4, pred, real, trace = test_model_TSM(
-                TSM_model_dict,
-                DF_test.iloc[[i]], 
+            TSM_model = create_model_sist_trans(
+                acts=train_fold_df["trace"],
+                times=train_fold_df["time_remain"],
+                metric=metric
+            )
+
+            current_test_indices = test_indexes[i][j]
+            
+            # 2. Fatie o DataFrame de teste
+            test_fold_df = DF_test[i].iloc[current_test_indices].copy()
+
+            # 3. Converta a coluna 'trace' para string no DataFrame de teste também,
+            #    para que ele tenha o mesmo formato que o TSM_model espera para a comparação.
+            test_fold_df['trace'] = test_fold_df['trace'].apply(lambda x: '_'.join(map(str, x)))
+            
+
+            # testa o modelo com os índices de teste sobre DF_test
+            err1, err2, err3, err4, pred, real, trace = test_model_TSM(
+                TSM_model,
+                test_fold_df,
+                current_test_indices,
                 metric,
                 pen
             )
-            
-        # Adiciona os resultados deste caso às listas gerais
-        # .extend() é usado porque test_model_TSM pode retornar uma lista de erros/preds por caso
-        erro_test1.extend(err1)
-        erro_test2.extend(err2)
-        erro_test3.extend(err3)
-        erro_test4.extend(err4)
-        predict_trace.extend(pred)
-        real_trace.extend(real)
-        better_trace.extend(trace)
 
-    # --- 3. Cálculo das Métricas Finais (feito uma vez, após o loop) ---
+            erro_test1.append(err1)
+            erro_test2.append(err2)
+            erro_test3.append(err3)
+            erro_test4.append(err4)
+            p.append(pred)
+            r.append(real)
+            show_trace.append(trace)
 
-    MAEs = [np.mean(k) for k in erro_test1] #calcula a média dos MAEs dos grupos de teste
-    RMSEs = [np.sqrt(np.mean(np.square(k))) for k in erro_test1] #calcula a média dos RMSEs dos grupos de teste
-    MAPEs = [100*np.mean(k) for k in erro_test2] #calcula a média dos MAPEs dos grupos de teste
-    MAPEs2 = [100*np.median(k) for k in erro_test2] #calcula a média dos MAPEs dos grupos de teste
+        # calcula métricas por fold
+        MAEs[i] = [np.mean(k) for k in erro_test1]
+        RMSEs[i] = [np.sqrt(np.mean(np.square(k))) for k in erro_test1]
+        MAPEs[i] = [100 * np.mean(k) for k in erro_test2]
+        MAPEs2[i] = [100 * np.median(k) for k in erro_test2]
 
-    MAEs_not_abs_mean = [np.mean(k) for k in erro_test3] #calcula a média dos MAEs dos grupos de teste
-    MAEs_not_abs_median = [np.median(k) for k in erro_test3] #calcula a média dos MAEs dos grupos de teste
-    MAPEs_not_abs_mean = [100*np.mean(k) for k in erro_test4] #calcula a média dos MAPEs dos grupos de teste
-    MAPEs_not_abs_median = [100*np.median(k) for k in erro_test4] #calcula a média dos MAPEs dos grupos de teste
+        MAEs_not_abs_mean[i] = [np.mean(k) for k in erro_test3]
+        MAEs_not_abs_median[i] = [np.median(k) for k in erro_test3]
+        MAPEs_not_abs_mean[i] = [100 * np.mean(k) for k in erro_test4]
+        MAPEs_not_abs_median[i] = [100 * np.median(k) for k in erro_test4]
+
+        predict_trace[i] = p
+        real_trace[i] = r
+        better_trace[i] = show_trace
 
     return {
         "MAE": MAEs,
@@ -485,7 +498,7 @@ def evaluate_model_new(DF_train, DF_test, metric="Mean", pen=1):
 # test_model_TSM
 # =====================================
 
-def test_model_TSM(model, df_test, metric="Mean", find=1):
+def test_model_TSM(model, df_test, test_ind, metric="Mean", find=1):
     """
     Args:
       modelo: modelo de sistema de transição.
@@ -496,8 +509,15 @@ def test_model_TSM(model, df_test, metric="Mean", find=1):
 
     Returns: erros absolutos e relativos do modelo nos sub-traces de teste.
     """
-    trace_time_remain = model
-    
+
+    # Pré-processamento inicial
+    # Cria dicionário de mapeamento atividade -> valor previsto
+    act_to_value = dict(zip(model['trace'].astype(str),
+                           model['time_remain']))
+
+    # Pré-filtra o dataframe de teste
+    test_df = df_test.loc[test_ind]
+
     # Inicializa listas de resultados
     error_pred1 = []  # Erro absoluto
     error_pred2 = []  # Erro relativo absoluto
@@ -508,11 +528,11 @@ def test_model_TSM(model, df_test, metric="Mean", find=1):
     find_better_traces = []
 
     # Processa cada caso de teste
-    for act, real in zip(df_test['trace'], df_test['time_remain']):
+    for act, real in zip(test_df['trace'], test_df['time_remain']):
         act_str = str(act)
 
-        if act_str in trace_time_remain:
-            pred = trace_time_remain[act_str]
+        if act_str in act_to_value:
+            pred = act_to_value[act_str]
 
             traces = None
         else:
@@ -523,7 +543,7 @@ def test_model_TSM(model, df_test, metric="Mean", find=1):
             
             if similar_acts:
                 # Obtém valores previstos para atividades similares
-                similar_times = [trace_time_remain[str(a)] for a in similar_acts if str(a) in trace_time_remain]
+                similar_times = [act_to_value[str(a)] for a in similar_acts if str(a) in act_to_value]
 
                 if similar_times:
                     if metric == "Mean":
@@ -554,14 +574,20 @@ def test_model_TSM(model, df_test, metric="Mean", find=1):
     return error_pred1, error_pred2, error_pred3, error_pred4, predicted, real1, find_better_traces
 
 def get_index(dfnew):
+    if isinstance(dfnew, pd.DataFrame):
+        dfnew = {"default": dfnew}
+    
+    index_df = {}
 
-    if "id_caso" not in dfnew.columns:
-        raise KeyError(f"O DataFrame não contém a coluna 'id_caso'.")
-    df_reset = dfnew.reset_index(drop=True)
+    for key, df in dfnew.items():
+        if "id_caso" not in df.columns:
+            raise KeyError(f"O DataFrame '{key}' não contém a coluna 'id_caso'.")
+        df_reset = df.reset_index(drop=True)
+        # 🔹 pega os índices de cada caso
+        case_indices = []
+        for case_id, group in df_reset.groupby("id_caso"):
+            case_indices.append(group.index.tolist())
 
-    case_index = []
+        index_df[key] = case_indices
 
-    for case_id, group in df_reset.groupby("id_caso"):
-        case_index.append(group.index.tolist())
-
-    return df_reset, case_index
+    return index_df

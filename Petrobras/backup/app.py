@@ -23,10 +23,11 @@ def prediction_tab():
         with st.spinner('Carregando arquivo...'):
             training_dataframe = load_data(train_file)
             training_dataframe = preprocess_data(training_dataframe)
+            st.session_state["original_train_df"] = training_dataframe
+            training_dataframe = st.session_state["original_train_df"].reset_index(drop=True)
             st.success("✅ Arquivo de treino carregado com sucesso!")
             with st.spinner("Processando dados..."):
-                training_dataframe, caseId_Index_Train = get_index(training_dataframe)
-                st.session_state["original_train_df"] = training_dataframe
+                caseId_Index_Train = get_index(training_dataframe)
                 st.session_state["df_train"] = caseId_Index_Train
                 st.success("✅ Pré-processamento finalizado com sucesso!")
                 
@@ -35,16 +36,13 @@ def prediction_tab():
     if test_file is not None:
             test_dataframe = load_data(test_file)
             test_dataframe = preprocess_data(test_dataframe)
+            st.session_state["original_test_df"] = test_dataframe
+            test_dataframe = st.session_state["original_test_df"].reset_index(drop=True)
             st.success("✅ Arquivo de teste carregado com sucesso!")
             with st.spinner("Processando dados..."):
-                test_dataframe, caseId_Index_Test = get_index(test_dataframe)
-                st.session_state["original_test_df"] = test_dataframe
+                caseId_Index_Test = get_index(test_dataframe)
                 st.session_state["df_test"] = caseId_Index_Test
                 st.success("✅ Pré-processamento finalizado com sucesso!")
-
-    st.write("Dados de Treino carregados:", st.session_state["original_train_df"].head(50))
-    st.write("Dados de Teste carregados:", st.session_state["original_test_df"].head(50))
-
 
     metric_option = st.radio("Selecione a métrica que deseja usar:", ["Média", "Mediana"])
 
@@ -64,58 +62,58 @@ def prediction_tab():
     if st.button("Executar Predição"):
         if "original_train_df" not in st.session_state or "original_test_df" not in st.session_state or "df_train" not in st.session_state or "df_test" not in st.session_state:
             st.error("⚠️ Você precisa carregar e dividir os dados primeiro!")
-        else: # Adicionei este 'else' para garantir que o código só execute se os dados existirem
-            with st.spinner('Avaliando o modelo...'):
-                results = evaluate_model_new(
-                    DF_train = training_dataframe,
-                    DF_test = test_dataframe,
-                    metric = metric,
-                    pen = pen
-                )
+        else:
+            results = evaluate_model_new(
+                DF_train = {"default": test_dataframe},
+                DF_test = {"default": training_dataframe},
+                train_indexes = st.session_state["df_train"],
+                test_indexes = st.session_state["df_test"],
+                metric = metric,
+                pen = pen
+            )
 
-            df_all = []
+        df_all = []
 
-            df_preds_reals = pd.DataFrame({
-                "real": results["Real_trace"],
-                "pred": results["Predict_trace"],
-                "find_better": results["better_trace"]
-            })
-            
-            final_df_list = []
-            print("===============================")
-            print(f"Imprimindo results------->>>:\n{results["Predict_trace"]}")
-            print("===============================")
+        # Itera pelos produtos dentro de Predict_trace
+        for prod_key in results["Predict_trace"].keys():
+            preds_folds = results["Predict_trace"][prod_key]
+            reals_folds = results["Real_trace"][prod_key]
+            trace_folds = results["better_trace"][prod_key]
+            test_folds = st.session_state["df_test"][prod_key]
 
-            for id_caso, test_indices_for_case in enumerate(st.session_state["df_test"]):
-            
-                original_id_trace = st.session_state["original_test_df"].loc[test_indices_for_case][["id_caso", "trace"]]
-                
+            for fold_idx, (preds, reals, trace, test_idx) in enumerate(zip(preds_folds, reals_folds, trace_folds, test_folds)):
+                ids = st.session_state["original_test_df"].loc[test_idx, ["id_caso", "trace"]]
+
                 df_fold = pd.DataFrame({
-                    "id_caso": original_id_trace["id_caso"],
-                    "trace_original": original_id_trace["trace"], # O trace do último evento do caso
-                    "find_better": results["better_trace"], # O trace similar encontrado
-                    "real": results["Real_trace"],
-                    "pred": results["Predict_trace"],
+                    "id_caso": ids["id_caso"].values,
+                    "trace": ids["trace"].astype(str).values,  # garante formato legível
+                    "find_better": trace,
+                    "real": reals,
+                    "pred": preds,
                 })
-                print(f"DataFrame do fold atual:\n{df_fold}")
+
                 # Erros
                 df_fold["error_abs"] = (df_fold["real"] - df_fold["pred"]).abs()
                 df_fold["error_rel"] = df_fold["error_abs"] / df_fold["real"].replace(0, np.nan)
 
-                final_df_list.append(df_fold)
+                df_all.append(df_fold)
 
-            # Concatenar tudo em uma única tabela
-            df_all = pd.concat(final_df_list, ignore_index=True)
+        df_model = pd.DataFrame(results["model"])
 
-            st.subheader("📊 Resultados Detalhados")
-            st.dataframe(df_all.head(50))  # mostra os primeiros 50 para não pesar
+        st.subheader("📈 Resultados Resumidos por Modelo")
+        st.dataframe(df_model)
+        # Concatenar tudo em uma única tabela
+        df_all = pd.concat(df_all, ignore_index=True)
 
-            st.download_button(
-                "⬇️ Baixar Resultados CSV",
-                data=df_all.to_csv(index=False).encode("utf-8"),
-                file_name="resultados_detalhados.csv",
-                mime="text/csv",
-            )
+        st.subheader("📊 Resultados Detalhados")
+        st.dataframe(df_all.head(50))  # mostra os primeiros 50 para não pesar
+
+        st.download_button(
+            "⬇️ Baixar Resultados CSV",
+            data=df_all.to_csv(index=False).encode("utf-8"),
+            file_name="resultados_detalhados.csv",
+            mime="text/csv",
+        )
 
 # ------------------------------
 # Aba 2 - Upload & Split (Hold-Out)
